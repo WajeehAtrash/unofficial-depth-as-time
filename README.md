@@ -169,6 +169,74 @@ correctly.
    itself. Compare against the Drifting-style negative control with care, and prefer
    conclusions that also hold for the ridge probe and the held-out `R_i`.
 
+## Reproducing the paper's figures and results
+
+`paper_reproduction/` regenerates the FLUX.1-schnell and MeanFlow figures of the paper and
+compares them with the paper's numbers. [paper_reproduction/REPORT.md](paper_reproduction/REPORT.md)
+shows the results. The commands below rebuild them: do the setup from the repository root, then
+run the scripts from `paper_reproduction/scripts`.
+
+**Requirements**
+
+- Python 3.10 or newer, and a GPU with about 30 GB of memory for FLUX (MeanFlow is small).
+- The package and its dependencies, plus `timm` for the MeanFlow model code:
+
+  ```bash
+  python -m venv .venv && source .venv/bin/activate
+  pip install -r requirements.txt
+  pip install -e . --no-deps
+  pip install timm
+  ```
+
+- FLUX.1-schnell in the Hugging Face cache (it downloads on first use, or add
+  `HF_HUB_OFFLINE=1` when it is already cached), and `stabilityai/sd-vae-ft-ema` for MeanFlow.
+- A checkout of the MeanFlow-PyTorch re-implementation (the one with `models/sit_meanflow.py`
+  and a converted SiT-B/4 checkpoint named `meanflow-B4.pth`, whose README links the weights).
+  Point the scripts at it with `export MEANFLOW_REPO=/path/to/MeanFlow-PyTorch`.
+The paper's own numbers are stored in `paper_reproduction/paper_data/` (see its README for how
+they were read from the figures), so the paper itself is not needed.
+
+**Run**
+
+```bash
+cd paper_reproduction/scripts
+
+python run_meanflow.py          # MeanFlow: rho, mixing fit, centering ablation, decodes  (~1 min)
+python run_flux.py              # FLUX: one-step, 4-step and 2-step analyses, mixing fit  (~17 min)
+python make_figures.py          # figures, comparison.json, summary_table.md, sensitivity.json
+```
+
+`run_flux.py` conditions the output head on the model's own `temb`, which is the correct
+conditioning. The paper's FLUX curves match a different one (the timestep on the 0-1 scale
+instead of multiplied by 1000, see the report). To also plot that variant, run it as its own
+flow before `make_figures.py`:
+
+```bash
+python run_flux.py --paper-head              # mixing fit with the paper-style head (~5 min)
+python test_head_conditioning_rho.py         # rho curves with both heads
+```
+
+**Outputs** (all under `paper_reproduction/`)
+
+| File | Content |
+|---|---|
+| `figures/*.png` | the regenerated figures, with the paper's digitized curves overlaid |
+| `summary_table.md` | one table of every paper-versus-ours comparison |
+| `comparison.json`, `sensitivity.json` | the same numbers in machine-readable form |
+| `data/` | raw results (gitignored, about 420 MB) |
+
+**Checks** (from the repository root)
+
+```bash
+pytest                           # unit tests for the package
+ruff check src tests scripts     # lint
+```
+
+The investigation of the FLUX noise coefficient is in the report, and the scripts behind it
+(`test_head_conditioning.py`, `explore_flux_protocol.py`, `diagnose_flux_mixing.py`,
+`localize_pipeline_gap.py`) are in `paper_reproduction/scripts/`. The report lists the command
+for each.
+
 ## Verification status
 
 Unit tests cover the decoding rule, `rho`, the mixing fit (exact coefficient recovery on
@@ -179,8 +247,10 @@ to end on the small `hf-internal-testing/tiny-flux-pipe` and `tiny-sd3-pipe` pip
 
 The full-size FLUX.1 schnell model and a MeanFlow SiT-B/4 checkpoint have also been run and
 compared with the paper's figures and numbers. MeanFlow agrees to within about 1-2%, and FLUX
-agrees to within 1-4 percentage points on the rho curves, with one gap in the size of the FLUX
-noise coefficient. The comparison, the regenerated figures and a code review of the gap are in
+agrees to within 1-4 percentage points on the rho curves. The FLUX noise coefficient differs
+from the paper by about 33%; the paper's values are reproduced to 3.4% when the output head is
+conditioned with the timestep on the 0-1 scale, which appears to be how the paper's FLUX probe
+was run. The comparison, the regenerated figures and the analysis of that difference are in
 [paper_reproduction/REPORT.md](paper_reproduction/REPORT.md). SD3.5 and other models have not
 been run.
 

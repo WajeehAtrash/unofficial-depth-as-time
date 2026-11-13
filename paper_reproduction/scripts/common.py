@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -13,7 +14,8 @@ ROOT = Path(__file__).resolve().parents[1]          # paper_reproduction/
 REPO = ROOT.parent                                    # unofficial-depth-as-time/
 DATA = ROOT / "data"
 FIGURES = ROOT / "figures"
-MEANFLOW_REPO = Path("/home/dsi/wajeeha/MeanFlow-PyTorch")
+# Checkout of MeanFlow-PyTorch with its meanflow-B4.pth checkpoint. Set MEANFLOW_REPO to override.
+MEANFLOW_REPO = Path(os.environ.get("MEANFLOW_REPO", "/home/dsi/wajeeha/MeanFlow-PyTorch"))
 
 sys.path.insert(0, str(REPO / "src"))
 

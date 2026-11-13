@@ -15,7 +15,7 @@ import torch.nn.functional as F
 from common import DATA, free_cuda, save_json
 from depth_as_time import LayerwiseProbe, TransportTask, probe_sampling_trajectory
 from depth_as_time.metrics import layerwise_distances
-from depth_as_time.mixing import run_mixing_analysis
+from depth_as_time.mixing import MixingStatistics, evaluate_mixing, run_mixing_analysis
 from depth_as_time.models.diffusers_adapter import DiffusersTransformerAdapter
 from depth_as_time.readouts import fit_ridge_readout, make_random_readout
 from depth_as_time.text_to_image import load_pipeline, prepare_text_to_image
@@ -67,6 +67,51 @@ def log(msg: str) -> None:
     print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
 
 
+@torch.no_grad()
+def paper_head_mixing(pipe, setup, dev: str, out, num_mixing: int) -> None:
+    """The mixing fit with the output head conditioned the way the paper appears to have done it.
+
+    Not the default flow. The default conditions the head on the model's own ``temb`` (captured
+    with a hook), which is correct and gives exactly ``(1, 0)`` at the last block. This flow
+    rebuilds ``temb`` with the timestep on the 0-1 scale instead of the x1000 the transformer
+    applies internally, while the final prediction stays the true model output. It reproduces
+    the paper's FLUX coefficients (see "The FLUX head conditioning" in REPORT.md). Same noise,
+    prompts and 70/30 split as the default mixing stage. Writes ``mixing_paper_head.json``.
+    """
+    adapter = DiffusersTransformerAdapter(
+        pipe.transformer, block_attrs=("single_transformer_blocks",))
+    tr, batch = pipe.transformer, 2
+    num_train = int(0.7 * num_mixing)
+    train, test = MixingStatistics(adapter.num_layers), MixingStatistics(adapter.num_layers)
+    gen = torch.Generator().manual_seed(0)
+    t0 = time.time()
+    for start in range(0, num_mixing, batch):
+        idx = torch.arange(start, min(start + batch, num_mixing))
+        adapter.set_conditioning(**setup.conditioning_for(idx))
+        z = torch.randn(len(idx), *setup.noise.shape[1:], generator=gen).to(dev, torch.bfloat16)
+        task = TransportTask.one_step(len(idx), device=dev, dtype=z.dtype)
+        hidden = adapter.hidden_states(z, task)
+        # True model output first: calling norm_out below re-triggers the adapter's hook and
+        # would replace the captured temb with the rebuilt one.
+        final = z.float() - adapter.readout(hidden[-1], task).float()
+        pooled = adapter._conditioning_for_batch(len(idx))["pooled_projections"]
+        temb = tr.time_text_embed(task.t, pooled)      # timestep 1.0, not 1000
+        v = torch.stack([tr.proj_out(tr.norm_out(h, temb)).float() for h in hidden])
+        clean = z.float() - v
+        is_train = (idx < num_train).to(dev)
+        for stats, mask in ((train, is_train), (test, ~is_train)):
+            if mask.any():
+                stats.update(clean[:, mask], final[mask], z[mask])
+        del hidden
+    m = evaluate_mixing(train, test)
+    save_json({"alpha": m.alpha, "sigma": m.sigma, "held_out_r": m.held_out_r,
+               "mean_held_out_r": m.mean_held_out_r, "num_train": m.num_train,
+               "num_test": m.num_test}, out / "mixing_paper_head.json")
+    log(f"paper-head mixing done in {time.time() - t0:.0f}s, last block "
+        f"({m.alpha[-1]:.3f}, {m.sigma[-1]:.3f}), mean R = {m.mean_held_out_r:.4f}")
+    adapter.close()
+
+
 def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--model", default="black-forest-labs/FLUX.1-schnell")
@@ -76,6 +121,11 @@ def main() -> None:
     p.add_argument("--skip", nargs="*", default=[])
     p.add_argument("--out-name", default="flux", help="Subfolder of data/ for the results.")
     p.add_argument("--prompts-file", default=None, help="One prompt per line (default: PROMPTS).")
+    p.add_argument(
+        "--paper-head", action="store_true",
+        help="Run only the paper-style head flow (mixing fit with the head conditioned on an "
+             "unscaled timestep, see REPORT.md) instead of the default analyses, which use the "
+             "model's own conditioning.")
     args = p.parse_args()
     dev, size = args.device, args.size
     out = DATA / args.out_name
@@ -93,6 +143,10 @@ def main() -> None:
     pipe.transformer.to(dev).eval()
     decode = setup.decode
     log(f"sigmas {setup.sigmas}; noise {tuple(setup.noise.shape)}")
+    if args.paper_head:
+        paper_head_mixing(pipe, setup, dev, out, args.num_mixing)
+        log("paper-head flow done")
+        return
     N = setup.num_prompts
 
     # ------------------------------------------------------------------ all 57 blocks
@@ -190,6 +244,7 @@ def main() -> None:
                     "fitted": small(decode(fitted[SB_SHOWN])),
                     "layers": SB_SHOWN}, out / "mixing_example.pt")
         adapter.close()
+
     log("all FLUX analyses done")
 
 

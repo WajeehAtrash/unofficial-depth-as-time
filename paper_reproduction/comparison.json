@@ -136,6 +136,36 @@
    "ours": -4.639141082763672,
    "diff_pct": 20.595251761105498
   },
+  "paper_head": {
+   "alpha_curve": {
+    "mean_abs_diff": 0.03683588081106731,
+    "mean_relative_pct": 8.084414311217143,
+    "max_relative_pct": 15.950366491463319,
+    "pearson_r": 0.9887646310554289
+   },
+   "sigma_curve": {
+    "mean_abs_diff": 0.07703873741472697,
+    "mean_relative_pct": 3.416931248442234,
+    "max_relative_pct": 6.419166686942894,
+    "pearson_r": 0.9995660410530927
+   },
+   "sigma_block0": {
+    "paper_fig": -5.842397571498502,
+    "ours": -6.103767395019531,
+    "diff_pct": -4.473674040878242
+   },
+   "last_block": {
+    "paper_fig": [
+     0.9637399903205877,
+     -0.1613158513528008
+    ],
+    "ours": [
+     0.9434897899627686,
+     -0.15939073264598846
+    ]
+   },
+   "mean_heldout_R": 0.1224631741642952
+  },
   "one_step_rho": {
    "W_out_vs_paper_fig3_red": {
     "mae_pct_points": 1.071945215968353,
@@ -155,17 +185,11 @@
     "relative_mae_pct": 6.106753269161337,
     "pearson_r": 0.9960584332656847
    },
-   "SWAPPED_W_out_vs_paper_figB1_red": {
+   "W_out_vs_paper_figB1_trained_red": {
     "mae_pct_points": 1.07284364269952,
     "max_abs_pct_points": 3.343877423468622,
     "relative_mae_pct": 2.3151185718958405,
     "pearson_r": 0.9997157012745954
-   },
-   "SWAPPED_ridge_vs_paper_figB1_blue": {
-    "mae_pct_points": 1.2787794453200345,
-    "max_abs_pct_points": 8.356026745933566,
-    "relative_mae_pct": 2.6133791022745614,
-    "pearson_r": 0.9991317933840189
    },
    "random_vs_paper_figB1_random_grey": {
     "mae_pct_points": 3.0040037847469137,
@@ -190,6 +214,18 @@
     "max_abs_pct_points": 9.324629903778824,
     "relative_mae_pct": 6.687679143042604,
     "pearson_r": 0.9979772366678524
+   },
+   "paper_head_W_out_vs_paper_figB1_Wout_blue": {
+    "mae_pct_points": 0.9955780020693419,
+    "max_abs_pct_points": 3.5478020293417956,
+    "relative_mae_pct": 2.0346141430519564,
+    "pearson_r": 0.9996286480873057
+   },
+   "paper_head_W_out_vs_paper_fig3_red": {
+    "mae_pct_points": 2.216506638653084,
+    "max_abs_pct_points": 10.543364838726244,
+    "relative_mae_pct": 4.783132399862019,
+    "pearson_r": 0.9980854405262011
    }
   },
   "four_step_endpoints_all57_blocks": {
@@ -288,6 +324,38 @@
     "pearson_r": 0.9982203236420691
    }
   },
+  "four_step_endpoints_paper_head": {
+   "all_steps": {
+    "mae_pct_points": 2.5002888914430628,
+    "max_abs_pct_points": 10.151126446710679,
+    "relative_mae_pct": 4.786918872925483,
+    "pearson_r": 0.992569016369095
+   },
+   "step1": {
+    "mae_pct_points": 1.1041405613788988,
+    "max_abs_pct_points": 1.7971054871913639,
+    "relative_mae_pct": 1.4950520027084522,
+    "pearson_r": 0.9964448395157848
+   },
+   "step2": {
+    "mae_pct_points": 1.6520985871083775,
+    "max_abs_pct_points": 5.197935675636711,
+    "relative_mae_pct": 3.047451738320394,
+    "pearson_r": 0.9924465986850193
+   },
+   "step3": {
+    "mae_pct_points": 2.779157442334702,
+    "max_abs_pct_points": 7.363848205696111,
+    "relative_mae_pct": 6.515641330220269,
+    "pearson_r": 0.996790958127368
+   },
+   "step4": {
+    "mae_pct_points": 4.465758974950274,
+    "max_abs_pct_points": 10.151126446710679,
+    "relative_mae_pct": 11.688110808553756,
+    "pearson_r": 0.9982088091519592
+   }
+  },
   "four_step_clean": {
    "all_steps": {
     "mae_pct_points": 1.974069352962376,
@@ -318,6 +386,38 @@
     "max_abs_pct_points": 5.818558080650238,
     "relative_mae_pct": 18.984897781466508,
     "pearson_r": 0.9979901914299061
+   }
+  },
+  "four_step_clean_paper_head": {
+   "all_steps": {
+    "mae_pct_points": 0.8175726052081478,
+    "max_abs_pct_points": 2.824586570188592,
+    "relative_mae_pct": 3.6905983682740064,
+    "pearson_r": 0.9994181415565512
+   },
+   "step1": {
+    "mae_pct_points": 0.8071330603471449,
+    "max_abs_pct_points": 2.7396689645004413,
+    "relative_mae_pct": 1.9699082739788825,
+    "pearson_r": 0.9993294867921476
+   },
+   "step2": {
+    "mae_pct_points": 0.8832901156142939,
+    "max_abs_pct_points": 2.824586570188592,
+    "relative_mae_pct": 3.6632512924966076,
+    "pearson_r": 0.9994392016485013
+   },
+   "step3": {
+    "mae_pct_points": 0.8764813397536794,
+    "max_abs_pct_points": 2.5327795174436063,
+    "relative_mae_pct": 5.695546114728777,
+    "pearson_r": 0.9990353350749034
+   },
+   "step4": {
+    "mae_pct_points": 0.7033859051174721,
+    "max_abs_pct_points": 1.8046950959027197,
+    "relative_mae_pct": 8.644101196405932,
+    "pearson_r": 0.9979365232608159
    }
   }
  }

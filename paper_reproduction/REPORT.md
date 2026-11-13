@@ -2,7 +2,8 @@
 
 This report compares the FLUX.1-schnell and MeanFlow results of the paper with results from this
 repository. The paper's numbers come from its text and from curves digitized out of the arXiv
-figure files (`paper/latex/figs/*.pdf`). Figures are in `figures/`.
+figure files of its arXiv source. The digitized values are stored in `paper_data/`, with a
+README on how they were read. Figures are in `figures/`.
 
 ## Setup
 
@@ -37,14 +38,24 @@ plotted points, and r is the Pearson correlation of the curves.
 | MeanFlow held-out R curve (11 blocks, N=192), Fig. B.3 | digitized | | mean 1.3%, max 3.4% per block |
 | Centering ablation, change in mean R (LayerNorm to RMS-only) | -0.17% | -0.19% | same conclusion |
 | FLUX one-step rho, W_out vs Fig. 3 | digitized | | MAE 1.1 pp, max 3.3 pp, r = 1.000 |
-| FLUX one-step rho, trained probe vs Fig. B.1 (see note 1) | digitized | | MAE 1.3 pp, max 8.4 pp, r = 0.999 |
 | FLUX one-step rho, random probe vs Fig. B.1 | digitized | | MAE 3.0 pp, max 10.4 pp, r = 0.977 |
-| FLUX 4-step rho of x_r, Fig. 7 (sb blocks, see note 2) | digitized | | MAE 4.1 pp (steps: 8.5 / 4.2 / 1.9 / 1.8), r = 0.975 |
-| FLUX 4-step rho of x_0, Fig. 7 (sb blocks) | digitized | | MAE 2.0 pp (steps: 1.3 / 2.6 / 2.4 / 1.5), r = 0.992 |
-| FLUX alpha curve (38 sb blocks), Fig. B.2 | digitized | | mean 9.1% per block, r = 0.985 |
-| FLUX sigma curve (38 sb blocks), Fig. B.2 | digitized | | **mean 32.9% per block**, r = 1.000 (see note 3) |
-| FLUX sigma at sb00 | -5.84 (figure) | -4.64 | 20.6% smaller magnitude |
-| FLUX mean held-out R | not reported | 0.131 | - |
+
+FLUX quantities that depend on how the output head is conditioned (see "The FLUX head
+conditioning" below). "Correct head" is this repository's default. "Paper-style head" rebuilds
+the head's conditioning with the timestep on the 0-1 scale.
+
+| Quantity | Paper | Correct head | Paper-style head |
+|---|---|---|---|
+| Sigma curve (38 sb blocks), Fig. B.2, mean error per block | digitized | 32.9% | **3.4%** |
+| Alpha curve (38 sb blocks), Fig. B.2, mean error per block | digitized | 9.1% | 8.1% |
+| Sigma at sb00 | -5.84 | -4.64 | -6.10 |
+| Last block (alpha, sigma) | (0.964, -0.161) | (1.000, 0.000) | (0.943, -0.159) |
+| One-step rho vs the Fig. B.1 "W_out" curve | digitized | 4.0 pp | **1.0 pp** |
+| 4-step rho of x_r, Fig. 7 (sb blocks, note 2), all steps | digitized | 4.1 pp | **2.5 pp** |
+|   per step (1 / 2 / 3 / 4) | | 8.5 / 4.2 / 1.9 / 1.8 | 1.1 / 1.7 / 2.8 / 4.5 |
+| 4-step rho of x_0, Fig. 7 (sb blocks), all steps | digitized | 2.0 pp | **0.8 pp** |
+|   per step (1 / 2 / 3 / 4) | | 1.3 / 2.6 / 2.4 / 1.5 | 0.8 / 0.9 / 0.9 / 0.7 |
+| Mean held-out R | not reported | 0.131 | 0.123 |
 
 The full table, including the alternative readings, is in `summary_table.md`. The raw numbers
 are in `comparison.json`.
@@ -59,28 +70,29 @@ are in `comparison.json`.
 - MeanFlow denoising and then renoising toward a noisy endpoint;
 - insensitivity to centering.
 
-MeanFlow numbers agree to within about 1-2%. FLUX rho curves agree to within 1-4 pp. The one
-clear quantitative gap is the size of FLUX's sigma coefficients. A code review (below) found
-no cause for it in this implementation.
+MeanFlow numbers agree to within about 1-2%. FLUX rho curves agree to within 1-4 pp with the
+correct head. The one large gap, the size of FLUX's sigma coefficients (33%), is explained: the
+paper's FLUX curves are reproduced to 3.4% when the output head is conditioned with the timestep
+on the wrong scale. This is very likely a slip in the paper's FLUX probe, not in this code. It
+does not change any qualitative conclusion.
 
 ## Notes on differences
 
-1. **Fig. B.1 legend appears swapped.** Our W_out curve matches the curve the paper labels
-   "trained probe" (MAE 1.1 pp). Our trained probe matches the curve labelled "W_out"
-   (1.3 pp). With the labels as printed, the errors are 4.0 pp and 2.8 pp. The paper's own
-   Fig. 3, which shows the W_out curve for FLUX-schnell, uses the same curve as the B.1
-   "trained probe". So the B.1 legend is very likely swapped. Either way the conclusion holds:
-   both readouts behave alike and the random probe does not.
+1. **Fig. B.1: the paper's "W_out" curve is the paper-style head.** Our correct W_out curve
+   matches the curve the paper labels "trained probe" (1.1 pp), and it is the paper-style head
+   that matches the curve labelled "W_out" (1.0 pp). An earlier version of this report read
+   that as a swapped legend. It is not: the paper's trained probe is fitted to the true final
+   output, so it tracks the correct head, while the paper's own W_out readout is the mis-scaled
+   one. The paper's Fig. 3 plots the same curve as the B.1 trained probe. The conclusion of
+   B.1 holds either way: fitted and model readouts behave alike and the random probe does not.
 2. **Fig. 7 uses only the 38 single-stream blocks.** The caption and text do not say so. Over
    all 57 blocks our curves stay flat through the double-stream blocks, and the MAE is
    14.0 pp (x_r) and 9.2 pp (x_0). Over the single-stream blocks only, it drops to 4.1 pp and
    2.0 pp. Fig. 3 and Fig. B.1 do use all 57 blocks: the db/sb boundary sits at 19/57.
-3. **FLUX sigma is about 20-40% smaller in magnitude than in the paper, with the same shape**
-   (r = 1.000). Alpha agrees better (9%). The paper's final FLUX block has
-   alpha = 0.96 and sigma = -0.16. A fit of the last layer against itself must give exactly
-   (1, 0), and our fit (and the paper's MeanFlow fit) does. So the paper's FLUX reference
-   "final prediction" or noise was probably not exactly the sb37 decode and the input latent
-   used here. The section below lists what was tested.
+3. **FLUX sigma with the correct head is 20-40% smaller in magnitude than in the paper**, with
+   the same shape (r = 1.000). This is the head-conditioning difference described in the next
+   section. The remaining 8% difference in alpha depends on the prompts and resolution, which
+   the paper does not give.
 4. **The MeanFlow checkpoint is B/4, not B/2.** Despite this, the coefficients agree to about
    1-2% and the decodes look the same as the paper's, including the 4x4-patch noise texture.
    That suggests the paper may have used this same public checkpoint, but this cannot be
@@ -119,47 +131,98 @@ or tested directly.
 3. *Memory bug (package, `text_to_image.py`).* Prompt encoding ran with autograd enabled, which
    made FLUX run out of GPU memory. Fixed during the main run. It did not affect results.
 
-**Experiments run for the FLUX sigma gap.** Each line is the mean error per block against
-Fig. B.2.
+## The FLUX head conditioning (cause of the sigma gap)
+
+**Finding.** The paper's FLUX coefficients, its last-block values and its Fig. 7 curves are
+reproduced when the output head is applied to the hidden states with a conditioning vector
+(`temb`) rebuilt from the timestep on the 0-1 scale, while the final prediction is the true
+model output.
+
+**Why this matters in FLUX.** The head is `proj_out(norm_out(h, temb))`, and `norm_out` scales
+and shifts the normalized state using `temb`. Inside `FluxTransformer2DModel.forward` the
+timestep is multiplied by 1000 before `time_text_embed` builds `temb`. A probe that applies the
+head outside the forward pass has to supply `temb` itself. This repository captures the model's
+own `temb` with a hook. Rebuilding it as `time_text_embed(timestep, pooled)` with the pipeline's
+timestep (1.0 at t = 1) gives a different vector, because the factor of 1000 is missing.
+
+**Evidence** (`scripts/test_head_conditioning.py`, `scripts/test_head_conditioning_rho.py`):
+
+| Head conditioning (512 px, one prompt, 64 trajectories) | sigma error | sb00 sigma | last block |
+|---|---|---|---|
+| Paper | | -5.84 | (0.964, -0.161) |
+| Model's own temb (correct) | 37.6% | -4.33 | (1.000, 0.000) |
+| Timestep 1.0, not x1000 | **3.4%** | -5.70 | (1.056, -0.199) |
+| Timestep 0 | 3.9% | -5.65 | (1.050, -0.191) |
+| Timestep x1000 twice | 43.7% | -4.11 | (0.951, 0.043) |
+| Pooled text embedding set to zero | 41.9% | -4.17 | (0.980, 0.028) |
+| Trained ridge probe instead of the head | 39.4% | -4.28 | (0.994, 0.004) |
+
+- The effect holds in every setup tried. With the unscaled timestep the sigma error is 1.6% to
+  4.2% across 256, 512 and 1024 px, one prompt or 32 prompts, and 256 or 512 text tokens. With
+  the correct head it is 33% to 38% in all of them.
+- In the full protocol of this report (1024 px, 32 prompts, 256 trajectories) the sigma error
+  falls from 32.9% to 3.4%, and the last block is (0.943, -0.159) against the paper's
+  (0.964, -0.161). A correct head must give exactly (1, 0) there.
+- The same change improves the paper's other FLUX curves, which were not used to find it: the
+  Fig. B.1 "W_out" curve (4.0 to 1.0 pp), Fig. 7 x_0 (2.0 to 0.8 pp) and Fig. 7 x_r step 1
+  (8.5 to 1.1 pp). Fig. 7 x_r step 4 gets worse (1.8 to 4.5 pp), a roughly 5% difference in
+  overall scale.
+- The paper's Fig. 7 curves end slightly above zero (0.03 and 0.006 at the last block of the
+  last step). With the correct head that value is exactly zero. With the paper-style head it is
+  0.017 and 0.004.
+
+**What it means.** The paper states that at the last layer the probe "recovers the model's
+ordinary output". Its FLUX curves do not satisfy that, and its MeanFlow, Shortcut and
+SANA-Sprint curves do, so this is most likely an implementation slip specific to its FLUX probe.
+This is an inference from the published figures. It cannot be confirmed without the authors'
+code. The qualitative findings are unaffected: with either head, sigma rises from strongly
+negative values toward zero across depth and alpha stays of order one.
+
+This repository keeps the correct conditioning as the default: a plain `run_flux.py` uses the
+model's own `temb`. The paper-style head is a separate flow behind its own flag,
+`run_flux.py --paper-head`, which runs only that flow and writes `mixing_paper_head.json`. The
+figures show both when that file is present.
+
+**What was ruled out before this was found.** Each line is the mean error per block against
+Fig. B.2, with the correct head.
 
 | Variant | alpha error | sigma error | sigma at sb00 (paper -5.84) |
 |---|---|---|---|
-| Main run: 1024 px, our 32 prompts, one-step reference | 9.1% | 32.9% | -4.64 |
-| 512 px | 28.1% | 34.4% | -4.46 |
+| Main run: 1024 px, 32 prompts | 9.1% | 32.9% | -4.64 |
+| 512 px, 32 prompts | 28.1% | 34.4% | -4.46 |
 | ImageNet-style prompts ("a photo of a ...") | 11.2% | 34.2% | -4.63 |
-| Reference = final 4-step sample (64 trajectories) | 8.5% | 31.3% | -4.63 |
+| 256 px, one prompt | 9.2% | 38.1% | -4.36 |
+| 512 px, one prompt | 5.1% | 37.6% | -4.33 |
+| 512 px, one prompt, 512 text tokens | 12.2% | 37.3% | -4.35 |
+| 1024 px, one prompt | 14.2% | 35.7% | -4.54 |
+| 256 px, empty prompt | 31.7% | 27.3% | -4.85 |
 
-A second pass traced the code path behind these rows stage by stage
-(`scripts/diagnose_flux_mixing.py`, `scripts/localize_pipeline_gap.py`, 16 trajectories, where
-the baseline sigma error is 32.9%):
+Sigma barely moves with the setup, while alpha does. Other definitions of the final
+prediction (the 4-step sample, a VAE decode-encode round trip) do not give the paper's last
+block either, and feeding the model noise scaled by 1.1 to 1.3 does not reproduce the curve
+(`scripts/explore_flux_protocol.py`, `scripts/test_input_scale.py`).
+
+The low-resolution setups were tried because of two clues in the paper. It says the 256
+trajectories come "from a single network evaluation", and the residual maps in its Fig. 4 are
+32 cells wide, which corresponds to 256 px images (latent grid) or 512 px (token grid). The
+paper's resolution and prompts remain unknown.
+
+A stage-by-stage trace of the code path (`scripts/diagnose_flux_mixing.py`,
+`scripts/localize_pipeline_gap.py`, 16 trajectories) found no problem in this implementation:
 
 | Stage tested | Result |
 |---|---|
 | Adapter vs a raw transformer call with the same inputs | identical (difference 0) |
 | Timestep passed as bf16 vs float32 | identical |
 | Output head (`norm_out`, `proj_out`) in float32 | coefficients change by at most 0.0004 |
-| Whole transformer in float32 (two GPUs) | coefficients change by at most 0.004; sigma error 32.9% |
-| Fit with an intercept, or with per-channel / per-token centering | sigma error 32.9% - 33.0% |
+| Whole transformer in float32 (two GPUs) | coefficients change by at most 0.004 |
+| Fit with an intercept, or with per-channel / per-token centering | sigma error unchanged |
 | Independent least-squares solve vs the package's streamed fit | same coefficients |
 
 One side finding: our one-step image differs by about 12% (cosine 0.993) from a stock
 `FluxPipeline` call with the same noise and prompt. This is not a conditioning bug. The bf16 T5
 embedding of a prompt changes by about 3% depending on whether it is encoded alone or in a
 batch, and the network amplifies that. It changes the image slightly, not the coefficients.
-
-Sigma is stable across everything above, so the gap does not come from prompts, resolution,
-the choice of reference, sampling noise, numerical precision, or the fit convention. No bug was
-found in this implementation.
-
-**What the gap looks like.** The paper's coefficients are close to a fixed linear map of ours:
-`[alpha', sigma'] = [alpha, sigma] @ [[1.03, -0.26], [0.03, 1.27]]`. Applying it reduces the
-sigma error from 33% to 8% and the alpha error from 9% to 2.5%. A fixed map like this is what
-two fits produce when they regress on different vectors: here, a noise vector about 0.79 times
-ours and a "final prediction" that contains roughly 0.2 of the noise. That matches the paper's
-non-trivial last-block fit (0.96, -0.16), and points to an undocumented choice in the paper's
-FLUX protocol (which tensors were used as the noise and the final prediction) rather than to a
-difference in the model or the probe. With the ImageNet-style prompts, the Fig. 7 step-1 x_r
-gap grows (8.5 to 11.8 pp), so that curve does depend somewhat on content.
 
 ## Figures
 
@@ -196,7 +259,7 @@ Endpoint prediction after each single-stream block for the two steps 1 to 0.5 an
 
 ### Fig. 7: sampling time and network depth (FLUX panels)
 
-Four-step FLUX rho for the endpoint and clean predictions, over the 38 single-stream blocks (see note 2). Mean absolute difference: 4.1 pp (x_r) and 2.0 pp (x_0). The SANA-Sprint panels and the teacher curves are not reproduced.
+Four-step FLUX rho for the endpoint and clean predictions, over the 38 single-stream blocks (see note 2). Mean absolute difference: 4.1 pp (x_r) and 2.0 pp (x_0) with the correct head (red), and 2.5 pp and 0.8 pp with the paper-style head (orange). The SANA-Sprint panels and the teacher curves are not reproduced.
 
 ![Fig. 7: sampling time and network depth (FLUX panels), ours](figures/fig7_flux_four_step_rho.png)
 
@@ -210,13 +273,13 @@ Ours is the ImageNet MeanFlow of panel (b): one-step, three-step endpoint and th
 
 ### Fig. B.1: readout controls on FLUX
 
-W_out, the trained probe and the random probe. The paper's curves are drawn here with the paper's own legend labels, which look swapped (note 1). The curve it labels 'trained probe' is the model's own readout.
+W_out, the trained probe and the random probe, with the paper's curves under the paper's own labels. The orange curve is W_out with the paper-style head, which follows the paper's "W_out" curve (note 1).
 
 ![Fig. B.1: readout controls on FLUX, ours](figures/figB1_flux_readout_controls.png)
 
 ### Fig. B.2: mixing coefficients (MeanFlow and FLUX panels)
 
-MeanFlow agrees almost exactly. FLUX has the same shape but a smaller sigma, which is the one clear gap (note 3 and the code review below). Only 2 of the paper's 5 panels are reproduced.
+MeanFlow agrees almost exactly. For FLUX, red and teal are the correct head and orange is the paper-style head, which follows the paper's curve (see "The FLUX head conditioning"). Only 2 of the paper's 5 panels are reproduced.
 
 ![Fig. B.2: mixing coefficients (MeanFlow and FLUX panels), ours](figures/figB2_mixing_coefficients_meanflow_flux.png)
 
@@ -245,28 +308,30 @@ These parts need models or training that are not available here:
 
 ## Rerunning
 
-Requirements: Python 3.10 or newer (the package uses `zip(strict=True)`), plus torch, diffusers,
-timm (for the MeanFlow model code), PyMuPDF and Pillow. The versions used are listed under
-"Setup". The scripts expect the MeanFlow-PyTorch
-repository and checkpoint at the path set in `scripts/common.py`, and the arXiv source of the
-paper extracted into `paper/latex/` (download `https://arxiv.org/e-print/2610.03626`). The
-paper's bitmaps in `paper_data/raster/` are rebuilt from that source on first use.
+Requirements: Python 3.10 or newer (the package uses `zip(strict=True)`), plus torch, diffusers
+and timm (for the MeanFlow model code). The versions used are listed under "Setup". The scripts
+expect the MeanFlow-PyTorch repository and checkpoint at the path in `scripts/common.py`, or set
+`MEANFLOW_REPO`. The paper's values are already in `paper_data/`.
 
 ```bash
 PY=../../.venv/bin/python   # or any Python 3.10+ environment with the requirements above
 cd paper_reproduction/scripts
 HF_HUB_OFFLINE=1 CUDA_VISIBLE_DEVICES=0 $PY run_meanflow.py      # ~1 min
-HF_HUB_OFFLINE=1 CUDA_VISIBLE_DEVICES=0 $PY run_flux.py          # ~15 min at 1024, needs ~30 GB
-$PY extract_paper_vector.py                                       # digitize vector plots
-$PY extract_paper_raster.py                                       # digitize raster rho plots
+HF_HUB_OFFLINE=1 CUDA_VISIBLE_DEVICES=0 $PY run_flux.py          # ~17 min at 1024, needs ~30 GB
+HF_HUB_OFFLINE=1 CUDA_VISIBLE_DEVICES=0 $PY run_flux.py --paper-head   # ~5 min, optional: paper-style head
 $PY make_figures.py        # figures/, comparison.json, sensitivity.json, summary_table.md
 
-# optional: the FLUX sensitivity variants from the code-review section
-HF_HUB_OFFLINE=1 CUDA_VISIBLE_DEVICES=0 $PY run_flux.py --size 512 --out-name flux_512 \
-    --skip one_step multi_step two_step
-HF_HUB_OFFLINE=1 CUDA_VISIBLE_DEVICES=0 $PY run_flux.py --out-name flux_altprompts \
-    --prompts-file prompts_imagenet_style.txt --skip one_step two_step
-HF_HUB_OFFLINE=1 CUDA_VISIBLE_DEVICES=0 $PY test_flux_reference.py   # 4-step reference test
+# optional: the investigation of the FLUX sigma gap
+G="HF_HUB_OFFLINE=1 CUDA_VISIBLE_DEVICES=0"
+env $G $PY test_head_conditioning.py 512:single:256 1024:multi:256   # head conditioning variants
+env $G $PY test_head_conditioning_rho.py                              # cross-check on Fig. 3 / 7
+env $G $PY explore_flux_protocol.py --tensor-dir /tmp/flux_protocol   # resolution / prompt search
+env $G $PY test_input_scale.py 512                                    # scaled-input hypothesis
+env $G $PY diagnose_flux_mixing.py                                    # precision, fit conventions
+env $G $PY localize_pipeline_gap.py                                   # adapter vs stock pipeline
+env $G $PY run_flux.py --size 512 --out-name flux_512 --skip one_step multi_step two_step
+env $G $PY run_flux.py --out-name flux_altprompts --prompts-file prompts_imagenet_style.txt \
+    --skip one_step two_step
 ```
 
 Raw results go to `data/` (about 420 MB, mostly decoded images). Logs are in `logs/`.

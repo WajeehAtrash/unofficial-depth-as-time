@@ -232,6 +232,13 @@ have_flux_one = exists("flux", "one_step_distances.pt")
 have_flux_ms = exists("flux", "multi_step_distances.pt")
 have_flux_mix = exists("flux", "mixing.json")
 cmp["flux"] = {}
+# Results with the output head conditioned as the paper appears to have done (temb rebuilt with
+# the timestep on the 0-1 scale instead of x1000; see REPORT.md). Optional.
+ph_mix = (json.loads((DATA / "flux/mixing_paper_head.json").read_text())
+          if exists("flux", "mixing_paper_head.json") else None)
+ph_rho = (json.loads((DATA / "flux_head_conditioning_rho.json").read_text())["unscaled"]
+          if exists("flux_head_conditioning_rho.json") else None)
+ORANGE = "#D9822B"
 
 if have_flux_mix:
     fx_mix = json.loads((DATA / "flux/mixing.json").read_text())
@@ -244,8 +251,19 @@ if have_flux_mix:
     cmp["flux"]["sigma_block0"] = {"paper_fig": p_fx["sigma"][0], "ours": fx_mix["sigma"][0],
                                    "diff_pct": rel_pct(fx_mix["sigma"][0], p_fx["sigma"][0])}
 
+    if ph_mix is not None:
+        cmp["flux"]["paper_head"] = {
+            "alpha_curve": coeff_stats(ph_mix["alpha"], p_fx["alpha"]),
+            "sigma_curve": coeff_stats(ph_mix["sigma"], p_fx["sigma"]),
+            "sigma_block0": {"paper_fig": p_fx["sigma"][0], "ours": ph_mix["sigma"][0],
+                             "diff_pct": rel_pct(ph_mix["sigma"][0], p_fx["sigma"][0])},
+            "last_block": {"paper_fig": [p_fx["alpha"][-1], p_fx["sigma"][-1]],
+                           "ours": [ph_mix["alpha"][-1], ph_mix["sigma"][-1]]},
+            "mean_heldout_R": ph_mix["mean_held_out_r"],
+        }
+
     # ---- Fig. B.2: all coefficients (MeanFlow + FLUX panels)
-    fig, axs = plt.subplots(1, 2, figsize=(10, 3.3))
+    fig, axs = plt.subplots(1, 2, figsize=(11, 3.5))
     for ax, ours, paper, title in ((axs[0], mf_mix, p_mf, "MeanFlow"),
                                    (axs[1], fx_mix, p_fx, "Distilled (FLUX, sb blocks)")):
         b = np.arange(len(ours["alpha"]))
@@ -255,8 +273,13 @@ if have_flux_mix:
         ax.plot(b, paper["sigma"], **PAPER_STYLE)
         ax.set_title(title)
         ax.set_xlabel("block")
+    if ph_mix is not None:
+        b = np.arange(38)
+        axs[1].plot(b, ph_mix["alpha"], "-", lw=1.4, color=ORANGE,
+                    label="ours, head conditioned as in the paper")
+        axs[1].plot(b, ph_mix["sigma"], "-", lw=1.4, color=ORANGE)
     axs[0].set_ylabel("coefficient value")
-    axs[1].legend(frameon=False, fontsize=8)
+    axs[1].legend(frameon=False, fontsize=7)
     fig.suptitle("Recovered depthwise mixing coefficients (Fig. B.2)", y=1.02)
     save(fig, "figB2_mixing_coefficients_meanflow_flux.png")
 
@@ -317,14 +340,18 @@ if have_flux_one:
         "W_out_vs_paper_fig3_red": curve_stats(ours_model, p3),
         "W_out_vs_paper_figB1_Wout_blue": curve_stats(ours_model, pB["blue"]),
         "ridge_vs_paper_figB1_trained_red": curve_stats(rho(fx_one["ridge"]), pB["red"]),
-        "SWAPPED_W_out_vs_paper_figB1_red": curve_stats(ours_model, pB["red"]),
-        "SWAPPED_ridge_vs_paper_figB1_blue": curve_stats(rho(fx_one["ridge"]), pB["blue"]),
+        "W_out_vs_paper_figB1_trained_red": curve_stats(ours_model, pB["red"]),
         "random_vs_paper_figB1_random_grey": curve_stats(rho(fx_one["random"]), pB["grey"]),
         "W_out_pixel_space_vs_paper_figB1_Wout": curve_stats(rho(fx_one["model_pixel"]),
                                                              pB["blue"]),
         "ours_W_out_vs_ours_ridge": curve_stats(ours_model, rho(fx_one["ridge"])),
         "paper_W_out_vs_paper_trained": curve_stats(pB["blue"], pB["red"]),
     }
+    if ph_rho is not None:
+        ph_one = np.array(ph_rho["one_step_rho"])
+        cmp["flux"]["one_step_rho"]["paper_head_W_out_vs_paper_figB1_Wout_blue"] = curve_stats(
+            ph_one, pB["blue"])
+        cmp["flux"]["one_step_rho"]["paper_head_W_out_vs_paper_fig3_red"] = curve_stats(ph_one, p3)
 
     # ---- Fig. 3: one-step decodes (FLUX jay, MeanFlow panda) + rho curve
     jay = torch.load(DATA / "flux/one_step_jay_decodes.pt")["clean_all_blocks"]
@@ -359,12 +386,14 @@ if have_flux_one:
         ax.fill_between(x, m - se, m + se, color=col, alpha=0.15)
         ax.plot(x, pB[pkey], color=col, lw=0.9, alpha=0.6, marker=".", ms=2,
                 label=f"{lab} (paper)")
+    if ph_rho is not None:
+        ax.plot(x, ph_rho["one_step_rho"], "-.", color=ORANGE, lw=1.8,
+                label=r"$W_{out}$, head conditioned as in the paper (ours)")
     ax.axvline(NUM_DB / L, color=RED, ls="--", lw=0.6)
     ax.set_xlabel("normalized progress i/L")
     ax.set_ylabel(r"$\rho(i)$")
-    ax.set_title("Readout controls on one-step FLUX-schnell (Fig. B.1)\n"
-                 "paper curves drawn with the paper's legend labels", fontsize=10)
-    ax.legend(frameon=False, fontsize=7, ncol=2)
+    ax.set_title("Readout controls on one-step FLUX-schnell (Fig. B.1)", fontsize=10)
+    ax.legend(frameon=False, fontsize=6.5, ncol=1, loc="lower left")
     save(fig, "figB1_flux_readout_controls.png")
 
     # latent vs pixel space (extra)
@@ -398,16 +427,26 @@ if have_flux_ms:
             "all_steps": curve_stats(ours.ravel(), paper.ravel()),
             **{f"step{s + 1}": curve_stats(ours[s], paper[s]) for s in range(4)},
         }
+        ph = None
+        if ph_rho is not None:
+            ph = np.array(ph_rho["fig7_x_r_rho" if key == "endpoints" else "fig7_x_0_rho"])
+            cmp["flux"][f"four_step_{key}_paper_head"] = {
+                "all_steps": curve_stats(ph.ravel(), paper.ravel()),
+                **{f"step{s + 1}": curve_stats(ph[s], paper[s]) for s in range(4)},
+            }
         for s in range(4):
             xs = (s + np.arange(L) / L) / 4
             ax.plot(xs, ours[s], color=RED, label="ours" if s == 0 else None)
+            if ph is not None:
+                ax.plot(xs, ph[s], color=ORANGE, lw=1.3,
+                        label="ours, head conditioned as in the paper" if s == 0 else None)
             ax.plot(xs, paper[s], **PAPER_STYLE, label="paper (digitized)" if s == 0 else None)
             if s:
                 ax.axvline(s / 4, color=RED, ls="--", lw=0.6, alpha=0.6)
         ax.set_title(f"FLUX 4-step, {lab} prediction")
         ax.set_xlabel("normalized progress (step + i/L)")
     axs[0].set_ylabel(r"$\rho(i)$")
-    axs[0].legend(frameon=False, fontsize=8)
+    axs[1].legend(frameon=False, fontsize=8)
     fig.suptitle("Sampling time and network depth are nested progressions (Fig. 7, FLUX panels, "
                  "single-stream blocks)", y=1.03)
     save(fig, "fig7_flux_four_step_rho.png")
@@ -502,12 +541,25 @@ def summary_table(c: dict) -> str:
                     f"| {sb['diff_pct']:+.1f}% |")
         rows.append(f"| FLUX mean held-out R (sb blocks) | not reported | "
                     f"{fx['mean_heldout_R']:.3f} | - |")
+    if "paper_head" in fx:
+        ph = fx["paper_head"]
+        for key, lab in (("alpha_curve", "alpha curve"), ("sigma_curve", "sigma curve")):
+            st = ph[key]
+            rows.append(f"| FLUX sb {lab}, head conditioned as in the paper | digitized | | mean "
+                        f"abs diff {st['mean_abs_diff']:.3f}, mean {st['mean_relative_pct']:.1f}%, "
+                        f"r={st['pearson_r']:.3f} |")
+        sb, lb = ph["sigma_block0"], ph["last_block"]
+        rows.append(f"|   same: sigma at sb00 | {sb['paper_fig']:.3f} (fig) | {sb['ours']:.3f} "
+                    f"| {sb['diff_pct']:+.1f}% |")
+        rows.append(f"|   same: last block (alpha, sigma) | ({lb['paper_fig'][0]:.3f}, "
+                    f"{lb['paper_fig'][1]:.3f}) | ({lb['ours'][0]:.3f}, {lb['ours'][1]:.3f}) | |")
     labels = {
         "W_out_vs_paper_figB1_Wout_blue": "FLUX one-step rho, W_out vs Fig. B.1 W_out",
         "W_out_vs_paper_fig3_red": "FLUX one-step rho, W_out vs Fig. 3 curve",
         "ridge_vs_paper_figB1_trained_red": "FLUX one-step rho, trained probe vs Fig. B.1",
-        "SWAPPED_W_out_vs_paper_figB1_red": "  same, legend swapped: W_out vs B.1 'trained'",
-        "SWAPPED_ridge_vs_paper_figB1_blue": "  same, legend swapped: trained vs B.1 'W_out'",
+        "paper_head_W_out_vs_paper_figB1_Wout_blue":
+            "  W_out with head conditioned as in the paper vs Fig. B.1 W_out",
+        "W_out_vs_paper_figB1_trained_red": "FLUX one-step rho, W_out vs Fig. B.1 trained probe",
         "random_vs_paper_figB1_random_grey": "FLUX one-step rho, random probe vs Fig. B.1",
         "W_out_pixel_space_vs_paper_figB1_Wout": "FLUX one-step rho, pixel-space W_out vs B.1",
     }
@@ -517,7 +569,9 @@ def summary_table(c: dict) -> str:
             rows.append(f"| {lab} | digitized | | MAE {st['mae_pct_points']:.1f} pp, max "
                         f"{st['max_abs_pct_points']:.1f} pp, r={st['pearson_r']:.3f} |")
     for key, lab in (("four_step_endpoints", "x_r, 38 sb blocks"),
+                     ("four_step_endpoints_paper_head", "x_r, head as in the paper"),
                      ("four_step_clean", "x_0, 38 sb blocks"),
+                     ("four_step_clean_paper_head", "x_0, head as in the paper"),
                      ("four_step_endpoints_all57_blocks", "x_r, all 57 blocks"),
                      ("four_step_clean_all57_blocks", "x_0, all 57 blocks")):
         if key in fx:
