@@ -129,7 +129,8 @@ def _encode_with_offload(pipe: Any, device: torch.device | str, encode: Callable
     for encoder in encoders:
         encoder.to(device)
     try:
-        return encode()
+        with torch.no_grad():
+            return encode()
     finally:
         for encoder in encoders:
             encoder.to("cpu")
