@@ -1,0 +1,5 @@
+data/
+logs/
+# The paper's own figures and bitmaps extracted from them (rebuilt by extract_paper_raster.py)
+figures/paper_originals/
+paper_data/raster/

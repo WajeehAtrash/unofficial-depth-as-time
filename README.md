@@ -177,8 +177,12 @@ and the diffusers adapter (the last-layer readout reproduces the real transforme
 FLUX and SD3, and a multi-step run reproduces a manual sampler). The scripts were also run end
 to end on the small `hf-internal-testing/tiny-flux-pipe` and `tiny-sd3-pipe` pipelines.
 
-The full-size checkpoints (FLUX.1 schnell, SD3.5 Large Turbo and others) have not been run in
-this environment, which has no GPU. Numbers from them have not been compared with the paper.
+The full-size FLUX.1 schnell model and a MeanFlow SiT-B/4 checkpoint have also been run and
+compared with the paper's figures and numbers. MeanFlow agrees to within about 1-2%, and FLUX
+agrees to within 1-4 percentage points on the rho curves, with one gap in the size of the FLUX
+noise coefficient. The comparison, the regenerated figures and a code review of the gap are in
+[paper_reproduction/REPORT.md](paper_reproduction/REPORT.md). SD3.5 and other models have not
+been run.
 
 ```bash
 pytest
@@ -202,6 +206,7 @@ src/depth_as_time/
     plotting.py, report.py   figures and the full analysis report
     cli.py                   shared command line helpers
 scripts/                     probe_diffusers.py, probe_custom.py
+paper_reproduction/          reproduction of the paper's FLUX and MeanFlow results, see REPORT.md
 tests/
 ```
 
