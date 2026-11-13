@@ -28,6 +28,22 @@ def _mean_over_valid(normalized: Tensor, valid: Tensor) -> Tensor:
     return normalized[:, valid].mean(dim=1)
 
 
+def normalized_remaining_from_distances(distances: Sequence[Tensor]) -> list[Tensor]:
+    """``rho(i)`` from precomputed distances, one ``(L, B)`` tensor per sampler step.
+
+    Each trajectory is divided by its maximum over all layers of all given steps, then the
+    curves are averaged over trajectories. Trajectories whose distances are all zero are
+    excluded. Useful when predictions are too large to keep and only distances are stored.
+
+    Returns:
+        One curve of shape ``(L,)`` per element of ``distances``.
+    """
+    maxima = torch.stack([d.amax(dim=0) for d in distances]).amax(dim=0)
+    valid = maxima > 0
+    safe_maxima = maxima.clamp_min(torch.finfo(maxima.dtype).tiny)
+    return [_mean_over_valid(d / safe_maxima, valid) for d in distances]
+
+
 def normalized_remaining_curves(
     blocks: Sequence[Tensor], reference: Tensor | None = None
 ) -> list[Tensor]:
@@ -49,20 +65,13 @@ def normalized_remaining_curves(
         One curve of shape ``(L,)`` per block.
     """
     if reference is None:
-        curves = []
-        for block in blocks:
-            distances = layerwise_distances(block, block[-1])
-            maxima = distances.amax(dim=0)
-            valid = maxima > 0
-            normalized = distances / maxima.clamp_min(torch.finfo(distances.dtype).tiny)
-            curves.append(_mean_over_valid(normalized, valid))
-        return curves
-
-    all_distances = [layerwise_distances(block, reference) for block in blocks]
-    maxima = torch.stack(all_distances).amax(dim=(0, 1))
-    valid = maxima > 0
-    safe_maxima = maxima.clamp_min(torch.finfo(maxima.dtype).tiny)
-    return [_mean_over_valid(d / safe_maxima, valid) for d in all_distances]
+        return [
+            normalized_remaining_from_distances([layerwise_distances(block, block[-1])])[0]
+            for block in blocks
+        ]
+    return normalized_remaining_from_distances(
+        [layerwise_distances(block, reference) for block in blocks]
+    )
 
 
 def normalized_remaining(predictions: Tensor, reference: Tensor | None = None) -> Tensor:

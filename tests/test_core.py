@@ -12,8 +12,10 @@ from depth_as_time import (
     run_mixing_analysis,
 )
 from depth_as_time.metrics import (
+    layerwise_distances,
     normalized_remaining,
     normalized_remaining_curves,
+    normalized_remaining_from_distances,
     radial_power_spectrum,
 )
 from depth_as_time.mixing import MixingStatistics, evaluate_mixing
@@ -146,6 +148,29 @@ def test_ridge_readout_recovers_a_linear_head_and_random_matches_scale(tiny_mode
     assert rand.weight.shape == ridge.weight.shape
     assert math.isclose(rand.weight.std().item(), ridge.weight.std().item(), rel_tol=0.35)
     assert not torch.allclose(rand(h, task), ridge(h, task))
+
+
+def test_rho_from_distances_matches_rho_from_predictions():
+    torch.manual_seed(0)
+    steps = [torch.randn(5, 3, 4) for _ in range(2)]
+    reference = torch.randn(3, 4)
+    expected = normalized_remaining_curves(steps, reference)
+    got = normalized_remaining_from_distances([layerwise_distances(s, reference) for s in steps])
+    for e, g in zip(expected, got, strict=True):
+        assert torch.allclose(e, g)
+
+
+def test_ridge_readout_streaming_matches_full_batch(tiny_model):
+    torch.manual_seed(1)
+    z = torch.randn(12, 4)
+    task = TransportTask.one_step(12)
+    seen = []
+    full = fit_ridge_readout(tiny_model, z, task).weight
+    streamed = fit_ridge_readout(
+        tiny_model, z, task, batch_size=5, on_batch=lambda idx: seen.append(idx.tolist())
+    ).weight
+    assert torch.allclose(full, streamed, atol=1e-5)
+    assert seen == [[0, 1, 2, 3, 4], [5, 6, 7, 8, 9], [10, 11]]
 
 
 def test_radial_power_spectrum_of_constant_image_is_dc_only():

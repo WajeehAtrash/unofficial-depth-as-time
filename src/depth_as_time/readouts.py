@@ -8,6 +8,7 @@ matched scale.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Protocol
 
 import torch
@@ -48,8 +49,10 @@ class LinearTokenReadout:
 
     def __call__(self, h: Tensor, task: TransportTask, label: Tensor | None = None) -> Tensor:
         """Apply LayerNorm and the linear map to ``h``."""
-        features = F.layer_norm(h, h.shape[-1:])
-        return self.model.tokens_to_output(features @ self.weight.to(features.dtype))
+        # The map is fit in float32, so apply it in float32 too (bf16 models would otherwise add
+        # rounding noise to every layer's readout).
+        features = F.layer_norm(h.float(), h.shape[-1:])
+        return self.model.tokens_to_output(features @ self.weight.float())
 
 
 @torch.no_grad()
@@ -59,10 +62,14 @@ def fit_ridge_readout(
     task: TransportTask,
     label: Tensor | None = None,
     ridge: float = 1e-3,
+    batch_size: int | None = None,
+    on_batch: Callable[[Tensor], None] | None = None,
 ) -> LinearTokenReadout:
     """Fit ``V`` so that ``V(LayerNorm(h_L)) ~ W_out(h_L)`` by closed-form ridge regression.
 
-    The probe sees only the last hidden state, never an intermediate layer.
+    The probe sees only the last hidden state, never an intermediate layer. The normal
+    equations are accumulated batch by batch, so large models can be fitted with
+    ``batch_size=1``.
 
     Args:
         model: Network to probe.
@@ -70,20 +77,30 @@ def fit_ridge_readout(
         task: Transport task for the fitting inputs.
         label: Optional labels.
         ridge: Regularization strength relative to the mean diagonal of the Gram matrix.
+        batch_size: Inputs per network call. ``None`` uses the whole batch at once.
+        on_batch: Optional callback called with the indices of each batch before the network
+            call, for example to set the matching text conditioning.
     """
-    h_last = model.hidden_states(z, task, label)[-1]
-    targets = model.readout_tokens(h_last, task, label)
-    features = F.layer_norm(h_last, h_last.shape[-1:])
-
-    x = features.reshape(-1, features.shape[-1]).double()
-    y = targets.reshape(-1, targets.shape[-1]).double()
-    gram = x.T @ x
+    size = z.shape[0] if batch_size is None else batch_size
+    gram = xty = None
+    for start in range(0, z.shape[0], size):
+        idx = torch.arange(start, min(start + size, z.shape[0]))
+        if on_batch is not None:
+            on_batch(idx)
+        sub_task = TransportTask(t=task.t[idx.to(task.t.device)], r=task.r[idx.to(task.r.device)])
+        sub_label = None if label is None else label[idx.to(label.device)]
+        h_last = model.hidden_states(z[idx.to(z.device)], sub_task, sub_label)[-1]
+        targets = model.readout_tokens(h_last, sub_task, sub_label)
+        x = F.layer_norm(h_last.float(), h_last.shape[-1:]).reshape(-1, h_last.shape[-1]).double()
+        y = targets.reshape(-1, targets.shape[-1]).double()
+        gram = x.T @ x if gram is None else gram + x.T @ x
+        xty = x.T @ y if xty is None else xty + x.T @ y
     gram += (
         ridge
         * gram.diagonal().mean()
         * torch.eye(gram.shape[0], dtype=gram.dtype, device=gram.device)
     )
-    weight = torch.linalg.solve(gram, x.T @ y)
+    weight = torch.linalg.solve(gram, xty)
     return LinearTokenReadout(model, weight.float())
 
 
