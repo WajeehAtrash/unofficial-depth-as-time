@@ -1,0 +1,16 @@
+# Core analysis
+torch>=2.2
+numpy>=1.26
+matplotlib>=3.8
+
+# Text-to-image models (FLUX, SD3, SD3.5 and turbo variants)
+diffusers>=0.42
+transformers>=4.44
+accelerate>=0.30
+safetensors>=0.4
+sentencepiece>=0.2
+protobuf>=4.25
+
+# Development and testing
+pytest>=8.0
+ruff>=0.5
